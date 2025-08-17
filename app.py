@@ -9,7 +9,8 @@ from flask_jwt_extended import (create_access_token, current_user, jwt_required,
                                 JWTManager, get_jwt_identity, set_access_cookies, get_jwt)
 from datetime import datetime, timedelta, timezone
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired
-from jinja2.compiler import generate
+from werkzeug.security import generate_password_hash, check_password_hash
+
 
 
 app = Flask(__name__)
@@ -41,9 +42,6 @@ class User(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(60), nullable=False)
 
-    def generate_password_hash(self, password):
-        self.password = password
-        return password
 
 def generate_verification_token(email):
     return s.dumps(email, salt='email_confirm')
@@ -54,7 +52,9 @@ def confirm_verification_token(token):
         email = s.loads(token, salt='email_confirm', max_age=86400)
         return email
     except SignatureExpired:
-        return False
+        return jsonify({'error': 'Token expired'}), 401
+
+
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     form = Forms()
@@ -72,7 +72,8 @@ def register():
         if User.query.filter_by(email=email).first():
             return jsonify('User already exists'), 400
 
-        user = User(username=username, email=email, password=password)
+        hash_password = generate_password_hash(password, method='sha256', salt_length=8)
+        user = User(username=username, email=email, password=hash_password)
         db.session.add(user)
         db.session.commit()
         token = generate_verification_token(user.email)
@@ -87,7 +88,7 @@ def register():
                       )
         mail.send(msg)
         flash('A verification email has been sent.', 'success')
-        return jsonify('User created'), 201
+        return redirect(url_for('verify_email', token=token))
 
 
 @app.route('/verify/<token>')
@@ -96,7 +97,7 @@ def verify_email(token):
     if not email:
         flash('The verification link is invalid or has expired')
         return redirect(url_for('register'))
-
+    return redirect(url_for('login'))
 
 
 # @jwt.user_identity_loader
@@ -145,12 +146,12 @@ def resend_verification_email():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for('index'))
+        return redirect(url_for('home'))
 
     username = request.form.get('username')
     password = request.form.get('password')
     user = User.query.filter_by(username=username).one_or_none()
-    if not user or user['password'] != password:
+    if not user or check_password_hash(user.password, password):
         return jsonify({'message': 'Username or password is invalid!'}), 401
 
     response = jsonify({'message': 'Logged in successfully!'})
@@ -161,7 +162,7 @@ def login():
 
 @app.route('/login_opt_protected', methods=['GET'])
 @jwt_required(optional=True)
-def protected():
+def optionally_protected():
     current_identity = get_jwt_identity()
     if current_identity:
         return jsonify(logged_in_as=current_identity), 200
