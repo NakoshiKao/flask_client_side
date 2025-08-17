@@ -41,6 +41,7 @@ class User(db.Model):
     username = db.Column(db.String(20), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(60), nullable=False)
+    address = db.Column(db.String(80), unique=True, nullable=True)
 
 
 def generate_verification_token(email):
@@ -62,6 +63,7 @@ def register():
         username = request.form.get('username')
         email = request.form.get('email')
         password = request.form.get('password')
+        address = request.form.get('address')
 
         if not username or not email or not password:
             return jsonify('Invalid data'), 400
@@ -73,7 +75,7 @@ def register():
             return jsonify('User already exists'), 400
 
         hash_password = generate_password_hash(password, method='sha256', salt_length=8)
-        user = User(username=username, email=email, password=hash_password)
+        user = User(username=username, email=email, password=hash_password, address=address)
         db.session.add(user)
         db.session.commit()
         token = generate_verification_token(user.email)
@@ -199,6 +201,27 @@ def reset_password():
         flash('Check your email to reset your password' )
         return redirect(url_for('login'))
     return render_template('reset_password.html', title='Reset Password', form=form)
+
+
+@app.route('/edit_profile', ['PUT'])
+@jwt_required(optional=False)
+def edit_profile():
+    form = EditForm()
+    if form.validate_on_submit():
+        username = request.form.get('username')
+        address = request.form.get('address')
+        if not username or not address:
+            return jsonify({'message': 'Username or Address is invalid!'}), 401
+        if username == User.query.filter_by(username=username).first():
+            return jsonify({'message': 'Username is already exist!'}), 401
+        if address == User.query.filter_by(address=address).first():
+            return jsonify({'message': 'Address is already exist!'}), 401
+
+
+        user = User(username=username, address=address)
+        db.session.add(user)
+        db.session.commit()
+        return jsonify({'message': 'User has been updated!'}), 200
 
 
 if __name__ == '__main__':
