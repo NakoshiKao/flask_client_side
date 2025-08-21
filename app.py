@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, Serializer
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from forms import RegistrationForm, LoginForm, ResetPasswordForm
+from forms import RegistrationForm, LoginForm, ResetPasswordForm, EditProfileForm
 from service import send_verification_email, send_reset_password_email
 
 load_dotenv()
@@ -236,7 +236,7 @@ def reset_password(token):
 @app.route('/edit_profile', methods=['PUT'])
 @jwt_required(optional=False)
 def edit_profile():
-    form = EditForm()
+    form = EditProfileForm()
     if form.validate_on_submit():
         username = request.form.get('username')
         address = request.form.get('address')
